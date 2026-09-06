@@ -10,13 +10,27 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from core.models import (Project, Target, BlackboardEntry, AttackEdge, db)
 from core.state_machine import StateMachine
 from modules.report_generator import generate_html_report
 from modules.privilege_analyzer import analyze_text
 
-mcp = FastMCP("RedTeam-Platform")
+
+def _transport_security():
+    """DNS-rebinding 防护：/mcp 已有平台 Token 鉴权（API 门卫），
+    该层默认关闭避免『公开 IP Host』被 421 拦截；
+    如需加固：设 REDTEAM_MCP_ALLOWED_HOSTS=host1[:port],host2 逗号分隔。"""
+    raw = os.environ.get("REDTEAM_MCP_ALLOWED_HOSTS", "").strip()
+    hosts = [h.strip() for h in raw.split(",") if h.strip()]
+    if hosts:
+        return TransportSecuritySettings(
+            enable_dns_rebinding_protection=True, allowed_hosts=hosts)
+    return TransportSecuritySettings(enable_dns_rebinding_protection=False)
+
+
+mcp = FastMCP("RedTeam-Platform", transport_security=_transport_security())
 
 # 内部路由锚定在 '/'，由 FastAPI 挂载的 /mcp 作为统一入口（避免 /mcp/mcp 叠合）
 try:

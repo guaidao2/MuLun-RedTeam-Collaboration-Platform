@@ -152,6 +152,7 @@ podman run -d --name mulun-redteam \
 | `REDTEAM_JWT_SECRET` | 对外部署必填 | JWT 密钥；未设置 → 容器内只监听 127.0.0.1 |
 | `REDTEAM_ADMIN_PASSWORD` | 建议 | 覆盖默认 admin 口令（仅内存，不改源码）|
 | `REDTEAM_DEBUG` | 否 | `1` 开 reload（调试），生产保持 `0` |
+| `REDTEAM_MCP_ALLOWED_HOSTS` | 否 | MCP DNS-rebinding 白名单，逗号分隔。留空=关闭该层（`/mcp` 已有平台 Token 鉴权；默认关闭可避免「公网 IP Host 被 mcp 返回 421」）|
 
 ---
 
