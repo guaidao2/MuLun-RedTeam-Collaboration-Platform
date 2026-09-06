@@ -1,0 +1,33 @@
+- category: service
+  enabled: true
+  id: R1
+  name: 未识别服务
+  priority: high
+  suggestion:
+    reason: 有目标但未发现任何服务，建议先做端口扫描
+    suggested_tool: nmap -sV -sC -p- <target_ip>
+    title: 对目标进行服务识别
+  trigger:
+    condition: has_target and service_count == 0
+- category: service
+  enabled: true
+  id: R2
+  name: 未做目录扫描
+  priority: high
+  suggestion:
+    reason: 发现 Web 服务但没有任何漏洞发现
+    suggested_tool: gobuster dir -u http://<target>:<port>/ -w /usr/share/wordlists/dirb/common.txt
+    title: 对 Web 服务进行目录枚举
+  trigger:
+    condition: web_port_count > 0 and vuln_count == 0
+- category: service
+  enabled: true
+  id: R7
+  name: SMB未测试
+  priority: high
+  suggestion:
+    reason: 发现 445 端口但未见 SMB 相关发现
+    suggested_tool: enum4linux -a <target_ip>
+    title: 检查 SMB 匿名访问和共享枚举
+  trigger:
+    condition: smb_port_count > 0 and entry_count >= 0

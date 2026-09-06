@@ -1,0 +1,11 @@
+- category: lateral
+  enabled: true
+  id: R9
+  name: 域环境未深挖
+  priority: medium
+  suggestion:
+    reason: 存在域相关信息但未发现域攻击路径
+    suggested_tool: bloodhound-python / SharpHound 收集后分析
+    title: 分析域环境，寻找域管攻击路径
+  trigger:
+    condition: domain_entry_count > 0

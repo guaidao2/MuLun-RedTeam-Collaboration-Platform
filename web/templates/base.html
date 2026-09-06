@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}幕论红队协同平台{% endblock %}</title>
+    <link href="/static/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    {% block navbar %}
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/projects">// RedTeam</a>
+            <div class="navbar-nav ms-auto">
+                <span class="nav-item nav-link" id="current-user" style="color:var(--accent)"></span>
+                <a class="nav-item nav-link" href="/projects" data-i18n="projects">项目</a>
+                <a class="nav-item nav-link" href="/rules" data-i18n="rules">规则</a>
+                <a class="nav-item nav-link" href="/settings" data-i18n="settings">设置</a>
+                <a class="nav-item nav-link" href="#" onclick="logout()" data-i18n="logout">退出</a>
+                <a class="nav-item nav-link" href="#" onclick="setLang('zh')" style="font-size:0.7rem;">中</a>
+                <a class="nav-item nav-link" href="#" onclick="setLang('en')" style="font-size:0.7rem;">EN</a>
+            </div>
+        </div>
+    </nav>
+    {% endblock %}
+
+    <div class="container-fluid mt-3">
+        {% block content %}{% endblock %}
+    </div>
+
+    <footer style="text-align:center; margin:28px 0 12px; font-size:0.62rem; color:var(--text-dim); letter-spacing:1px;">
+        玄幕安全团队（Xuanmu Security Team）· 开发：guaidao2
+    </footer>
+
+    <script src="/static/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/app.js"></script>
+    <script>document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });</script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

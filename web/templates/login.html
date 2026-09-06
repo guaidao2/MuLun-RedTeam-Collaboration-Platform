@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>幕论红队协同平台</title>
+    <link href="/static/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <h2>RedTeam</h2>
+            <div class="login-subtitle" id="login-subtitle">协同渗透测试平台</div>
+
+            <form id="login-form">
+                <div class="mb-3">
+                    <label class="form-label" id="lbl-username">用户名</label>
+                    <input type="text" class="form-control" id="username" required autocomplete="username">
+                </div>
+                <div class="mb-4">
+                    <label class="form-label" id="lbl-password">密码</label>
+                    <input type="password" class="form-control" id="password" required autocomplete="current-password">
+                </div>
+                <button type="submit" class="btn btn-login" id="btn-login">认证</button>
+                <div class="error-msg" id="error-msg"></div>
+            </form>
+
+            <div style="text-align:center; margin-top:20px; font-size:0.65rem; color:var(--text-dim); letter-spacing:2px;">
+                玄幕安全团队 · guaidao2
+            </div>
+            <div style="text-align:center; margin-top:8px;">
+                <a href="#" onclick="setLang('zh')" style="font-size:0.65rem; color:var(--accent); text-decoration:none;">中文</a>
+                <span style="color:var(--border); margin:0 6px;">|</span>
+                <a href="#" onclick="setLang('en')" style="font-size:0.65rem; color:var(--text-dim); text-decoration:none;">English</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        document.getElementById('login-subtitle').textContent = t('collaborative_platform');
+        document.getElementById('lbl-username').textContent = t('username');
+        document.getElementById('lbl-password').textContent = t('password');
+        document.getElementById('btn-login').textContent = t('authenticate');
+
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('error-msg');
+            errorDiv.style.display = 'none';
+            try {
+                const resp = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username, password})
+                });
+                const data = await resp.json();
+                if (resp.ok) {
+                    localStorage.setItem('token', data.access_token);
+                    localStorage.setItem('username', data.username);
+                    window.location.href = '/projects';
+                } else {
+                    errorDiv.textContent = data.detail || 'Access denied';
+                    errorDiv.style.display = 'block';
+                }
+            } catch (err) {
+                errorDiv.textContent = 'Connection error';
+                errorDiv.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+- category: general
+  enabled: true
+  id: R8
+  name: 提权未尝试
+  priority: medium
+  suggestion:
+    reason: 已有漏洞被利用（exploited）但没有任务记录，建议尝试提权
+    suggested_tool: 参考提权分析模块
+    title: 尝试提权操作
+  trigger:
+    condition: has_exploited and not has_task
+- category: general
+  enabled: true
+  id: R10
+  name: 未生成报告
+  priority: low
+  suggestion:
+    reason: 已有被利用的漏洞，建议汇总发现并生成报告
+    suggested_tool: ''
+    title: 建议生成渗透测试报告
+  trigger:
+    condition: has_report_ready

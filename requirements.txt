@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+python-jose[cryptography]
+pyyaml
+jinja2
+python-multipart
+defusedxml
+mcp

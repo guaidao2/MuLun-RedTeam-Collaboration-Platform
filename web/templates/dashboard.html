@@ -1,0 +1,818 @@
+{% extends "base.html" %}
+{% block title %}项目仪表盘{% endblock %}
+
+{% block head %}
+<script src="/static/vendor/vis/vis-network.min.js"></script>
+{% endblock %}
+
+{% block navbar %}
+<nav class="navbar navbar-expand-lg navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/projects">// RedTeam</a>
+        <span class="navbar-text" id="project-name" style="color:var(--accent); font-size:0.85rem; letter-spacing:1px;"></span>
+        <div class="navbar-nav ms-auto">
+            <button class="btn btn-sm btn-primary me-2" onclick="showAddTarget()">+ <span data-i18n="add_target">添加目标</span></button>
+            <button class="btn btn-sm btn-primary me-2" onclick="showAddEntry()">+ <span data-i18n="add_entry">添加条目</span></button>
+            <button class="btn btn-sm btn-outline-secondary me-2" onclick="showImportModal()">+ <span data-i18n="import_data">导入数据</span></button>
+            <button class="btn btn-sm btn-outline-warning me-2" onclick="loadSuggestions()"><span data-i18n="analysis">分析</span></button>
+            <button class="btn btn-sm btn-outline-success me-2" onclick="openReport()"><span data-i18n="report">报告</span></button>
+            <button class="btn btn-sm btn-outline-secondary me-2" onclick="showPrivescModal()"><span data-i18n="privesc">提权分析</span></button>
+            <button class="btn btn-sm btn-outline-light me-2" id="members-btn" onclick="showMembersModal()" style="display:none;"><span data-i18n="members">成员</span></button>
+            <a class="nav-item nav-link" href="/settings" data-i18n="settings">设置</a>
+            <a class="nav-item nav-link" href="#" onclick="logout()" data-i18n="logout">退出</a>
+            <a class="nav-item nav-link" href="#" onclick="setLang('zh')" style="font-size:0.7rem;">中</a>
+            <a class="nav-item nav-link" href="#" onclick="setLang('en')" style="font-size:0.7rem;">EN</a>
+        </div>
+    </div>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="row g-2">
+    <div class="col-lg-8">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+            <span id="live-indicator" style="font-size:0.65rem; color:var(--text-dim);">● live</span>
+            <div>
+                <button class="btn btn-sm btn-outline-secondary" onclick="clearAutoLayout()" style="font-size:0.68rem;"><span data-i18n="auto_layout">自动排版</span></button>
+                <button class="btn btn-sm btn-outline-secondary ms-1" onclick="refreshAll()" style="font-size:0.68rem;"><span data-i18n="refresh">刷新</span></button>
+            </div>
+        </div>
+        <div class="graph-container" id="attack-graph"></div>
+    </div>
+    <div class="col-lg-4">
+        <div class="detail-panel" id="detail-panel">
+            <div style="color:var(--text-secondary); font-size:0.75rem; text-transform:uppercase; letter-spacing:2px; margin-bottom:15px;" data-i18n="node_inspector">节点详情</div>
+            <div id="node-detail" style="color:var(--text-secondary);" data-i18n="select_node">选择节点查看详情</div>
+        </div>
+    </div>
+</div>
+
+<div class="suggestion-bar mt-2" id="suggestion-bar" style="display:none">
+    <div style="color:var(--yellow); font-size:0.7rem; text-transform:uppercase; letter-spacing:2px; margin-bottom:10px;">> <span data-i18n="next_steps">下一步建议</span></div>
+    <div id="suggestion-list"></div>
+</div>
+
+<div class="suggestion-bar mt-2" id="target-bar">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="color:var(--accent); font-size:0.7rem; text-transform:uppercase; letter-spacing:2px; margin-bottom:0;">> <span data-i18n="targets">目标</span></div>
+        <span id="target-count" style="font-size:0.65rem; color:var(--text-dim);"></span>
+    </div>
+    <div id="target-list"></div>
+</div>
+
+<div class="modal fade" id="targetModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title" style="color:var(--accent)" data-i18n="add_target">添加目标</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-3"><label class="form-label" data-i18n="ip_address">IP 地址</label><input type="text" class="form-control" id="target-ip"></div>
+                <div class="mb-3"><label class="form-label" data-i18n="hostname">主机名</label><input type="text" class="form-control" id="target-hostname"></div>
+                <div class="mb-3"><label class="form-label" data-i18n="os">操作系统</label><input type="text" class="form-control" id="target-os"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="cancel">取消</button>
+                <button class="btn btn-danger" onclick="addTarget()" data-i18n="add">添加</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="entryModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title" id="entryModalLabel" style="color:var(--accent)" data-i18n="add_entry">添加条目</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3"><label class="form-label" data-i18n="category">分类</label>
+                        <select class="form-select" id="entry-category" onchange="renderEntryFields()">
+                            <option value="asset">资产</option><option value="service">服务</option>
+                            <option value="vulnerability">漏洞</option><option value="credential">凭据</option>
+                            <option value="task">任务</option><option value="note">备注</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3"><label class="form-label" data-i18n="target">目标</label><select class="form-select" id="entry-target"><option value="">-- 无 --</option></select></div>
+                </div>
+                <div class="mb-3"><label class="form-label" data-i18n="title">标题</label><input type="text" class="form-control" id="entry-title"></div>
+                <!-- 结构化字段区（按类别渲染） -->
+                <div id="entry-fields"></div>
+                <div class="mb-1" style="display:flex; justify-content:space-between; align-items:center;">
+                    <label class="form-label mb-0" data-i18n="advanced">高级(原始 JSON)</label>
+                    <a href="#" onclick="toggleRawJson(event)"><span id="raw-json-toggle" style="font-size:0.7rem; color:var(--accent);">[+] 展开</span></a>
+                </div>
+                <div id="raw-json-wrap" style="display:none;">
+                    <textarea class="form-control font-monospace" id="entry-content" rows="4" style="background:var(--bg-input)!important; color:var(--text-primary)!important;">{}</textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="cancel">取消</button>
+                <button class="btn btn-danger" onclick="addEntry()" data-i18n="add">添加</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="membersModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title" style="color:var(--accent)" data-i18n="members">成员管理</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div id="member-list"></div>
+                <div class="input-group mt-3">
+                    <input type="text" class="form-control" id="member-username" placeholder="username">
+                    <button class="btn btn-danger" onclick="addMember()" data-i18n="add_member">添加成员</button>
+                </div>
+                <div id="member-msg" style="font-size:0.7rem;margin-top:6px;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="importModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title" style="color:var(--accent)" data-i18n="import_data">导入数据</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-3"><label class="form-label" data-i18n="import_type">导入类型</label>
+                    <select class="form-select" id="import-type">
+                        <option value="nmap">Nmap XML (.xml)</option>
+                        <option value="nessus">Nessus (.nessus/.json)</option>
+                        <option value="json">JSON (.json)</option>
+                    </select>
+                </div>
+                <div class="mb-3"><label class="form-label" data-i18n="import_file">选择文件</label><input type="file" class="form-control" id="import-file"></div>
+                <div id="import-status" style="font-size:0.75rem; color:var(--text-secondary);"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="cancel">取消</button>
+                <button class="btn btn-danger" onclick="doImport()" data-i18n="upload">上传导入</button>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="privescModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title" style="color:var(--accent)" data-i18n="privesc">提权分析</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-2"><label class="form-label">粘贴枚举输出 (linpeas / sudo -l / find -perm 等)</label>
+                    <textarea class="form-control font-monospace" id="privesc-text" rows="10" style="font-size:0.72rem;"></textarea>
+                </div>
+                <div id="privesc-result"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="cancel">取消</button>
+                <button class="btn btn-danger" onclick="runPrivesc()" data-i18n="analyze">分析</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+
+const PROJECT_ID = {{ project_id }};
+let graphNodes = [], graphEdges = [], network = null;
+let editingEntryId = null;
+let lastGraphSig = null;   // null 表示尚未加载
+let lastTargetSig = null;
+let targetPollBusy = false;
+let graphPollBusy = false;
+const POS_KEY = `rt_graph_pos_${PROJECT_ID}`;
+
+// ============ 攻击图数据获取与差异刷新 ============
+async function loadGraph(preserveView = true) {
+    if (graphPollBusy) return;
+    graphPollBusy = true;
+    try {
+        const resp = await apiFetch(`/api/projects/${PROJECT_ID}/graph`);
+        const data = await resp.json();
+        const nodes = data.data.nodes || [];
+        const edges = data.data.edges || [];
+        // 签名覆盖 label/content，保证标题/内容修改后能重绘
+        const sig = nodes.map(x => `${x.id}:${x.label}:${x.status}:${(x.content?JSON.stringify(x.content):'')}`).join('|')
+                   + '||' + edges.map(x => `${x.id}:${x.from}:${x.to}:${x.label||''}`).join('|');
+        if (sig === lastGraphSig) return;   // 无变化不重绘
+        lastGraphSig = sig;
+        graphNodes = nodes;
+        graphEdges = edges;
+        renderGraph(preserveView);
+    } catch(e) { /* 忽略瞬时错误，下次轮询重试 */ }
+    finally { graphPollBusy = false; }
+}
+
+function getPinnedPositions() {
+    try { return JSON.parse(localStorage.getItem(POS_KEY) || '{}'); } catch(e) { return {}; }
+}
+
+function savePinnedPositions(ids) {
+    if (!network) return;
+    const pos = network.getPositions();
+    const cur = getPinnedPositions();
+    const only = (ids && ids.length) ? ids : Object.keys(pos);
+    only.forEach(id => { if (pos[id]) cur[id] = {x: pos[id].x, y: pos[id].y}; });
+    localStorage.setItem(POS_KEY, JSON.stringify(cur));
+}
+
+function clearAutoLayout() {
+    localStorage.removeItem(POS_KEY);
+    lastGraphSig = null;          // 强制重绘
+    loadGraph(false);
+}
+
+// 由边方向估算初始分层列（最长路径），给物理布局一个左→右的初值
+function computeLayer(nodes, edges) {
+    const indeg = {}; const out = {};
+    nodes.forEach(n => { indeg[n.id] = 0; out[n.id] = []; });
+    edges.forEach(e => {
+        if (e.from in indeg && e.to in indeg) { indeg[e.to]++; out[e.from].push(e.to); }
+    });
+    const layer = {};
+    const q = nodes.filter(n => indeg[n.id] === 0).map(n => n.id);
+    q.forEach(id => { layer[id] = 0; });
+    while (q.length) {
+        const cur = q.shift();
+        (out[cur]||[]).forEach(nxt => {
+            if (layer[nxt] === undefined || layer[nxt] < layer[cur] + 1) layer[nxt] = layer[cur] + 1;
+            indeg[nxt]--;
+            if (indeg[nxt] === 0) q.push(nxt);
+        });
+    }
+    // 未连通的放中间
+    nodes.forEach(n => { if (layer[n.id] === undefined) layer[n.id] = 1; });
+    return layer;
+}
+
+function renderGraph(preserveView) {
+    const container = document.getElementById('attack-graph');
+
+    if (graphNodes.length === 0) {
+        container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-dim);font-size:0.8rem;flex-direction:column;gap:8px;"><div style="font-size:2rem;opacity:0.3;">+</div><div>添加条目后此处显示攻击图</div></div>';
+        network = null;
+        return;
+    }
+
+    // 保留当前视图与选中
+    let view = null, selectedNode = null;
+    if (network) {
+        try {
+            view = {x: network.getViewPosition().x, y: network.getViewPosition().y, scale: network.getScale()};
+        } catch(e) {}
+        selectedNode = network.getSelectedNodes()[0] || null;
+    }
+
+    const pinned = getPinnedPositions();
+    const layer = computeLayer(graphNodes, graphEdges);
+
+    const nodes = new vis.DataSet(graphNodes.map(n => {
+        const p = pinned[n.id];
+        const L = layer[n.id] || 1;
+        const base = {
+            id: n.id,
+            label: `${n.label}\n[${t(n.category)}]`,
+            color: getCategoryColor(n.category),
+            font: {color: '#111827', size: 11, face: '-apple-system, BlinkMacSystemFont, Consolas, monospace'},
+            shape: 'box', margin: 8, borderWidth: 2,
+        };
+        // pinned：给定坐标但 physics 关闭 —— 位置固定且仍然可自由拖动
+        if (p) { base.x = p.x; base.y = p.y; base.physics = false; }
+        else { base.x = L * 230 + (Math.random() - 0.5) * 40; }
+        return base;
+    }));
+    const edges = new vis.DataSet(graphEdges.map(e => ({
+        id: e.id, from: e.from, to: e.to, label: e.label,
+        color: {color: '#d1d5db', highlight: '#2563eb'},
+        arrows: {to: {enabled: true, scaleFactor: 0.6}},
+        font: {color: '#6b7280', size: 9, face: '-apple-system, BlinkMacSystemFont, Consolas, monospace'},
+        width: 1.5, smooth: {type: 'dynamic', roundness: 0.4},
+    })));
+
+    const options = {
+        layout: {randomSeed: 7},
+        physics: {
+            enabled: true,
+            stabilization: {iterations: 80, updateInterval: 25},
+            barnesHut: {
+                gravitationalConstant: -3500, centralGravity: 0.04,
+                springLength: 130, springConstant: 0.045, damping: 0.09,
+            },
+        },
+        interaction: {zoomView: true, dragView: true, hover: true, dragNodes: true},
+    };
+
+    network = new vis.Network(container, {nodes, edges}, options);
+    network.on('click', (params) => {
+        if (params.nodes.length > 0) {
+            const nodeId = params.nodes[0];
+            if (linkFromNode && linkFromNode !== nodeId) {
+                createEdge(linkFromNode, nodeId);
+                linkFromNode = null;
+            } else {
+                network.selectNodes([nodeId]);
+                showNodeDetail(nodeId);
+            }
+        } else {
+            showNodeDetail(null);
+        }
+    });
+    // 拖拽后：冻结该节点（physics off 防回弹、仍可再拖），并持久化坐标
+    network.on('dragEnd', (params) => {
+        if (params.nodes.length) {
+            const ds = network.body.data.nodes;
+            params.nodes.forEach(id => {
+                const pos = ds.get(id);
+                if (pos) ds.update({id: id, x: pos.x, y: pos.y, physics: false});
+            });
+            savePinnedPositions(params.nodes);
+        }
+    });
+
+    if (preserveView && view) {
+        network.once('afterDrawing', () => {
+            try { network.moveTo({position: {x: view.x, y: view.y}, scale: view.scale, animation: false}); } catch(e) {}
+        });
+    } else {
+        network.once('afterDrawing', () => {
+            try { network.fit({animation: false}); } catch(e) {}
+        });
+    }
+    if (selectedNode) {
+        network.once('afterDrawing', () => {
+            // 若选中节点已被他人删除则清空面板
+            if (!graphNodes.some(n => n.id === selectedNode)) { showNodeDetail(null); }
+            else { try { showNodeDetail(selectedNode); } catch(e) {} }
+        });
+    }
+}
+
+// 每 4 秒轮询一次后端：攻击图 + 目标列表（多人编辑时优雅刷新，无变化不重绘）
+setInterval(() => { loadGraph(true); loadTargetList(); }, 4000);
+
+function getCategoryColor(cat) {
+    const colors = {
+        asset: '#2563eb', service: '#7c3aed', vulnerability: '#dc2626',
+        credential: '#d97706', task: '#6b7280', note: '#16a34a'
+    };
+    const c = colors[cat] || '#6b7280';
+    return {background: c, border: c, highlight: {background: c, border: c}};
+}
+
+function showNodeDetail(nodeId) {
+    if (nodeId == null) {
+        document.getElementById('node-detail').innerHTML =
+            `<div style="color:var(--text-secondary); font-size:0.8rem;">${t('select_node')}</div>`;
+        return;
+    }
+    const node = graphNodes.find(n => n.id === nodeId);
+    if (!node) return;
+    // 文本类条目（note/task）：若有 text 字段直接展示原文，而非 JSON
+    let contentHtml;
+    const cont = node.content || {};
+    if ((node.category === 'note' || node.category === 'task') && typeof cont.text === 'string' && cont.text) {
+        contentHtml = `<pre style="font-size:0.75rem; max-height:200px; overflow:auto; white-space:pre-wrap;">${esc(cont.text)}</pre>`;
+    } else {
+        contentHtml = `<pre style="font-size:0.72rem; max-height:150px; overflow:auto;">${esc(JSON.stringify(cont, null, 2))}</pre>`;
+    }
+    // 该节点发出的边
+    const outEdges = graphEdges.filter(e => e.from === nodeId);
+    const outList = outEdges.length === 0
+        ? '<div style="font-size:0.7rem; color:var(--text-dim);">暂无出边</div>'
+        : outEdges.map(e => {
+            const toNode = graphNodes.find(n => n.id === e.to);
+            const label = toNode ? esc(toNode.label) : e.to;
+            return `<div class="d-flex justify-content-between align-items-center py-1" style="border-bottom:1px solid var(--border); font-size:0.72rem;">
+                <span>→ ${label} ${e.label ? `<span style="color:var(--text-dim)">(${esc(e.label)})</span>` : ''}</span>
+                <button class="btn btn-sm btn-outline-danger" onclick="removeEdge(${e.id})" style="font-size:0.6rem; padding:0 6px;">${t('delete')}</button>
+            </div>`;
+          }).join('');
+    document.getElementById('node-detail').innerHTML = `
+        <div style="margin-bottom:10px;">
+            <span class="entry-badge category-${node.category}">${t(node.category)}</span>
+            <span class="badge bg-secondary ms-1" style="font-size:0.6rem;">${esc(node.status)}</span>
+        </div>
+        <h5 style="color:var(--accent); font-size:0.9rem; margin-bottom:8px;">${esc(node.label)}</h5>
+        <div style="font-size:0.7rem; color:var(--text-secondary); margin-bottom:12px;">${t('author')} ${esc(node.author)}</div>
+        ${contentHtml}
+        <div class="mt-2 mb-2">
+            <label class="form-label" style="font-size:0.65rem;">${t('status')}</label>
+            <select class="form-select form-select-sm" id="status-select" onchange="changeStatus(${node.id}, this.value)">
+                <option value="new" ${node.status==='new'?'selected':''}>${t('new_status')}</option>
+                <option value="confirmed" ${node.status==='confirmed'?'selected':''}>${t('confirmed')}</option>
+                <option value="exploited" ${node.status==='exploited'?'selected':''}>${t('exploited')}</option>
+                <option value="fixed" ${node.status==='fixed'?'selected':''}>${t('fixed')}</option>
+            </select>
+        </div>
+        <div style="display:flex; gap:8px;">
+            <button class="btn btn-sm btn-outline-primary flex-grow-1" onclick="startLinkMode(${node.id})" id="link-btn">${t('link_node')}</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="editNode(${node.id})">${t('edit')}</button>
+            <button class="btn btn-sm btn-outline-danger" onclick="deleteNode(${node.id})">${t('delete')}</button>
+        </div>
+        <div class="mt-3">
+            <div style="font-size:0.65rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px;">${t('outgoing_links')}</div>
+            ${outList}
+        </div>
+    `;
+}
+
+// ===== 连线模式 =====
+let linkFromNode = null;
+
+function startLinkMode(nodeId) {
+    linkFromNode = nodeId;
+    const btn = document.getElementById('link-btn');
+    const hint = document.getElementById('link-hint');
+    if (btn) btn.style.borderColor = 'var(--accent)';
+    document.getElementById('node-detail').insertAdjacentHTML('beforeend',
+        `<div id="link-hint" style="margin-top:8px; padding:6px; background:var(--accent-light); border-radius:4px; font-size:0.72rem; color:var(--accent-dark);">
+         ${t('link_mode_hint')} <a href="#" onclick="cancelLinkMode();return false;" style="color:var(--red);">${t('cancel')}</a></div>`);
+}
+
+function cancelLinkMode() {
+    linkFromNode = null;
+    const hint = document.getElementById('link-hint');
+    if (hint) hint.remove();
+    const btn = document.getElementById('link-btn');
+    if (btn) btn.style.borderColor = '';
+}
+
+async function createEdge(fromId, toId) {
+    const from = graphNodes.find(n => n.id === fromId);
+    const to = graphNodes.find(n => n.id === toId);
+    if (!from || !to) { cancelLinkMode(); return; }
+    if (graphEdges.some(e => e.from === fromId && e.to === toId)) {
+        alert('此连线已存在');
+        cancelLinkMode();
+        return;
+    }
+    const label = prompt(`为连线添加说明 (${from.label} → ${to.label})`, '') || '';
+    const resp = await apiFetch(`/api/projects/${PROJECT_ID}/graph/edges`, {
+        method: 'POST',
+        body: JSON.stringify({from_entry_id: fromId, to_entry_id: toId, label})
+    });
+    // 无论成败都退出连线模式，避免残留高亮/提示
+    cancelLinkMode();
+    if (resp.ok) { loadGraph(); }
+    else { alert((await resp.json()).detail || '创建连线失败'); }
+}
+
+async function removeEdge(edgeId) {
+    if (!confirm(t('confirm_delete_link'))) return;
+    const resp = await apiFetch(`/api/projects/${PROJECT_ID}/graph/edges/${edgeId}`, {method:'DELETE'});
+    if (resp.ok) loadGraph();
+    else alert((await resp.json()).detail || '删除失败');
+}
+
+async function changeStatus(entryId, status) {
+    await apiFetch(`/api/projects/${PROJECT_ID}/entries/${entryId}/status`, {method:'PATCH', body:JSON.stringify({status})});
+    loadGraph();
+}
+
+async function deleteNode(entryId) {
+    if (!confirm(t('confirm_delete_entry'))) return;
+    await apiFetch(`/api/projects/${PROJECT_ID}/entries/${entryId}`, {method:'DELETE'});
+    document.getElementById('node-detail').innerHTML = `<div style="color:var(--text-secondary);">${t('select_node')}</div>`;
+    loadGraph();
+}
+
+async function loadSuggestions() {
+    const bar = document.getElementById('suggestion-bar');
+    const resp = await apiFetch(`/api/projects/${PROJECT_ID}/suggestions`);
+    const data = await resp.json();
+    bar.style.display = 'block';
+    const summary = data.summary || {};
+    const head = document.getElementById('suggestion-list');
+    if (!data.data || data.data.length === 0) {
+        head.innerHTML = `<span style="color:var(--text-secondary); font-size:0.75rem;">${t('no_suggestions')}</span>`;
+        return;
+    }
+    const sumLine = `<div style="font-size:0.7rem; color:var(--text-dim); margin-bottom:6px;">High ${summary.high||0} · Medium ${summary.medium||0} · Low ${summary.low||0}</div>`;
+    head.innerHTML = sumLine + data.data.map(s => {
+        const pc = s.priority === 'high' ? 'danger' : s.priority === 'medium' ? 'warning' : 'secondary';
+        return `<div class="mb-1" style="font-size:0.75rem;">
+        <span class="badge bg-${pc}" style="font-size:0.55rem;">${esc(s.priority)}</span>
+        <span class="badge bg-secondary" style="font-size:0.55rem;">${esc(s.rule_id)}</span>
+        ${esc(s.title)}
+        ${s.suggested_tool ? `<span style="color:var(--accent); font-family:monospace;">${esc(s.suggested_tool)}</span>` : ''}
+        <div style="color:var(--text-secondary); font-size:0.68rem;">${esc(s.reason)}</div>
+    </div>`;
+    }).join('');
+}
+
+async function loadTargets(selectedValue) {
+    const resp = await apiFetch(`/api/projects/${PROJECT_ID}/targets`);
+    const data = await resp.json();
+    const sel = document.getElementById('entry-target');
+    sel.innerHTML = '<option value="">-- 无 --</option>' + (data.data||[]).map(item => `<option value="${item.id}">${esc(item.ip)}</option>`).join('');
+    // 设置选中值（必须等 options 渲染完成后再设）
+    if (selectedValue) sel.value = String(selectedValue);
+    return data.data || [];
+}
+
+// ===== 结构化录入表单（按类别渲染字段）=====
+const FIELD_SPECS = {
+    service: [['port', '端口', 'number'], ['protocol', '协议', 'text'], ['service', '服务名', 'text'], ['version', '版本', 'text']],
+    vulnerability: [['name', '漏洞名', 'text'], ['severity', '严重性', 'severity'], ['cve_id', 'CVE编号', 'text'], ['cvss', 'CVSS', 'text'], ['description', '描述', 'textarea']],
+    credential: [['protocol', '协议', 'protocol'], ['username', '用户名', 'text'], ['password', '密码', 'text']],
+    note: [['text', '笔记内容（可直接粘贴整段）', 'notearea']],
+    task: [['text', '任务内容', 'notearea']],
+    asset: [],
+};
+
+function fieldHtml(key, label, type, val) {
+    const v = esc(val ?? '');
+    if (type === 'severity') {
+        const opts = ['critical','high','medium','low','info'].map(s =>
+            `<option value="${s}" ${val===s?'selected':''}>${s}</option>`).join('');
+        return `<div class="col-md-6 mb-2"><label class="form-label" style="font-size:0.65rem;">${label}</label><select class="form-select form-select-sm f-field" data-key="${key}">${opts}</select></div>`;
+    }
+    if (type === 'protocol') {
+        const opts = ['SSH','FTP','SMB','RDP','MSSQL','MySQL','PostgreSQL','Redis','Telnet','HTTP'].map(s =>
+            `<option value="${s}" ${val===s?'selected':''}>${s}</option>`).join('');
+        return `<div class="col-md-6 mb-2"><label class="form-label" style="font-size:0.65rem;">${label}</label><select class="form-select form-select-sm f-field" data-key="${key}">${opts}</select></div>`;
+    }
+    if (type === 'notearea') {
+        return `<div class="col-12 mb-2"><label class="form-label" style="font-size:0.65rem;">${label}</label><textarea class="form-control f-field" data-key="${key}" rows="6" style="white-space:pre-wrap;">${v}</textarea></div>`;
+    }
+    if (type === 'textarea') {
+        return `<div class="col-12 mb-2"><label class="form-label" style="font-size:0.65rem;">${label}</label><textarea class="form-control form-control-sm f-field" data-key="${key}" rows="2">${v}</textarea></div>`;
+    }
+    return `<div class="col-md-6 mb-2"><label class="form-label" style="font-size:0.65rem;">${label}</label><input type="${type==='number'?'number':'text'}" class="form-control form-control-sm f-field" data-key="${key}" value="${v}"></div>`;
+}
+
+function renderEntryFields(cat, content) {
+    const cat2 = cat || document.getElementById('entry-category').value;
+    const specs = FIELD_SPECS[cat2] || [];
+    const c = content || {};
+    const wrap = document.getElementById('entry-fields');
+    if (specs.length === 0) { wrap.innerHTML = ''; return; }
+    wrap.innerHTML = `<div class="row mb-2">${specs.map(([k,l,t]) => fieldHtml(k,l,t,c[k])).join('')}</div>`;
+    // 若已有原始 JSON 且无结构化数据则回填
+    const raw = document.getElementById('entry-content');
+    if (!raw.value || raw.value === '{}') { raw.value = JSON.stringify(specs.reduce((o,[k])=>{o[k]=c[k]||'';return o;},{}), null, 2); }
+}
+
+function collectEntryContent() {
+    // 表单拥有的字段为权威值（即使被清空也删除原 key）；raw 仅补充表单没有的键
+    const fields = document.querySelectorAll('#entry-fields .f-field');
+    const owned = new Set([...fields].map(f => f.dataset.key));
+    const obj = {};
+    fields.forEach(f => { const val = f.value; if (val.trim() !== '') obj[f.dataset.key] = val; });
+    try {
+        const raw = JSON.parse(document.getElementById('entry-content').value || '{}');
+        Object.keys(raw).forEach(k => {
+            const v = raw[k];
+            if (owned.has(k)) return;                    // 表单字段权威，空则视为删除
+            if (v !== '' && v != null) obj[k] = v;       // 保留表单未覆盖的扩展字段
+        });
+    } catch(e) { /* ignore */ }
+    if (obj.port) obj.port = parseInt(obj.port) || obj.port;
+    if (obj.cvss) obj.cvss = parseFloat(obj.cvss) || obj.cvss;
+    return obj;
+}
+
+function toggleRawJson(e) {
+    if (e) e.preventDefault();
+    const wrap = document.getElementById('raw-json-wrap');
+    const isHidden = wrap.style.display === 'none' || !wrap.style.display;
+    wrap.style.display = isHidden ? 'block' : 'none';
+    document.getElementById('raw-json-toggle').textContent = isHidden ? '[-] 收起' : '[+] 展开';
+}
+
+function showAddTarget() { new bootstrap.Modal(document.getElementById('targetModal')).show(); }
+
+function showImportModal() {
+    document.getElementById('import-status').textContent = '';
+    new bootstrap.Modal(document.getElementById('importModal')).show();
+}
+
+async function openReport() {
+    const resp = await apiFetch(`/api/projects/${PROJECT_ID}/report`);
+    if (!resp.ok) { alert((await resp.json()).detail || t('import_failed')); return; }
+    const html = await resp.text();
+    const blob = new Blob([html], {type: 'text/html'});
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+function showPrivescModal() {
+    document.getElementById('privesc-text').value = '';
+    document.getElementById('privesc-result').innerHTML = '';
+    new bootstrap.Modal(document.getElementById('privescModal')).show();
+}
+
+async function runPrivesc() {
+    const text = document.getElementById('privesc-text').value;
+    const result = document.getElementById('privesc-result');
+    if (!text.trim()) { result.innerHTML = '<div style="color:var(--red);font-size:0.75rem;">请输入文本</div>'; return; }
+    result.innerHTML = '<div style="color:var(--text-secondary);font-size:0.75rem;">分析中...</div>';
+    const resp = await apiFetch('/api/privilege-escalation/analyze', {method:'POST', body:JSON.stringify({text})});
+    const data = await resp.json();
+    if (!resp.ok) { result.innerHTML = `<div style="color:var(--red);font-size:0.75rem;">${esc(data.detail||'失败')}</div>`; return; }
+    const findings = data.data || [];
+    if (findings.length === 0) {
+        result.innerHTML = '<div style="color:var(--text-secondary);font-size:0.75rem;">未识别到明显提权向量，建议提供更完整枚举输出</div>';
+        return;
+    }
+    result.innerHTML = findings.map(f => `<div style="border:1px solid var(--border);border-radius:4px;padding:8px;margin-bottom:6px;">
+        <div style="font-size:0.75rem;"><span class="badge bg-danger" style="font-size:0.55rem;">${esc(f.vector)}</span> <strong>${esc(f.name)}</strong></div>
+        <div style="font-size:0.7rem;color:var(--text-secondary);margin:4px 0;">${esc(f.description)}</div>
+        <code style="font-size:0.7rem;color:var(--green);display:block;white-space:pre-wrap;">${esc(f.commands.join('\n'))}</code>
+        ${f.references && f.references.length ? `<div style="font-size:0.65rem;color:var(--accent);">${f.references.map(x=>esc(x)).join(' ')}</div>` : ''}
+    </div>`).join('');
+}
+
+async function doImport() {
+    const type = document.getElementById('import-type').value;
+    const fileInput = document.getElementById('import-file');
+    const statusEl = document.getElementById('import-status');
+    if (!fileInput.files || !fileInput.files[0]) { statusEl.textContent = t('choose_file'); statusEl.style.color = 'var(--red)'; return; }
+    const file = fileInput.files[0];
+    const fd = new FormData();
+    fd.append('file', file);
+    statusEl.textContent = t('importing');
+    statusEl.style.color = 'var(--text-secondary)';
+    try {
+        const resp = await fetch(`/api/projects/${PROJECT_ID}/import/${type}`, {
+            method: 'POST',
+            headers: {Authorization: `Bearer ${localStorage.getItem('token')}`},
+            body: fd
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            const s = data.data || {};
+            statusEl.textContent = `导入完成: targets=${s.targets||0}, services=${s.services||0}, vulns=${s.vulnerabilities||0}, entries=${s.entries||0}, skipped=${s.skipped||0}`;
+            statusEl.style.color = 'var(--green)';
+            loadGraph(); loadTargetList();
+        } else {
+            statusEl.textContent = data.detail || t('import_failed');
+            statusEl.style.color = 'var(--red)';
+        }
+    } catch(e) {
+        statusEl.textContent = t('import_failed');
+        statusEl.style.color = 'var(--red)';
+    }
+}
+
+function showAddEntry() {
+    editingEntryId = null;
+    // 清空表单避免残留上次数据
+    document.getElementById('entry-title').value = '';
+    document.getElementById('entry-category').value = 'note';
+    document.getElementById('entry-content').value = '{}';
+    renderEntryFields('note');
+    document.getElementById('entryModalLabel').textContent = t('add_entry');
+    loadTargets();
+    new bootstrap.Modal(document.getElementById('entryModal')).show();
+}
+
+async function editNode(entryId) {
+    const node = graphNodes.find(n => n.id === entryId);
+    if (!node) return;
+    // 复用添加条目弹窗，填入已有数据
+    document.getElementById('entry-title').value = node.label;
+    document.getElementById('entry-category').value = node.category;
+    document.getElementById('entry-content').value = JSON.stringify(node.content, null, 2);
+    renderEntryFields(node.category, node.content);
+    // 标记为编辑模式
+    editingEntryId = entryId;
+    document.getElementById('entryModalLabel').textContent = t('edit');
+    // 先加载目标再回填选中值（修复 target 被清空的 bug）
+    await loadTargets(node.target_id || '');
+    new bootstrap.Modal(document.getElementById('entryModal')).show();
+}
+
+async function addTarget() {
+    const ip = document.getElementById('target-ip').value;
+    if (!ip) return;
+    const resp = await apiFetch(`/api/projects/${PROJECT_ID}/targets`, {method:'POST', body:JSON.stringify({ip, hostname:document.getElementById('target-hostname').value, os:document.getElementById('target-os').value})});
+    if (!resp.ok) { const d = await resp.json().catch(()=>({})); alert(d.detail || '添加失败'); return; }
+    bootstrap.Modal.getInstance(document.getElementById('targetModal')).hide();
+    document.getElementById('target-ip').value = '';
+    lastTargetSig = null;   // 强制刷新目标列表
+    loadTargetList(); loadGraph(); loadTargets();
+}
+
+// 手动刷新：图 + 目标列表都强制重取
+function refreshAll() {
+    lastGraphSig = null;
+    lastTargetSig = null;
+    loadGraph(false);
+    loadTargetList();
+}
+
+async function addEntry() {
+    let title = document.getElementById('entry-title').value;
+    const category = document.getElementById('entry-category').value;
+    const targetId = document.getElementById('entry-target').value || null;
+    let content;
+    try { content = collectEntryContent(); } catch(e) { alert('Invalid JSON'); return; }
+    // 笔记/任务：标题留空时从粘贴文本自动取首行/前 40 字
+    if (!title && content.text) {
+        title = String(content.text).split(/\r?\n/)[0].trim().slice(0, 40) || '（无标题）';
+    }
+    if (!title) return;
+    if (editingEntryId) {
+        // 编辑模式
+        await apiFetch(`/api/projects/${PROJECT_ID}/entries/${editingEntryId}`, {method:'PUT', body:JSON.stringify({title, category, content, target_id: targetId ? parseInt(targetId) : null})});
+        editingEntryId = null;
+    } else {
+        // 新增模式
+        await apiFetch(`/api/projects/${PROJECT_ID}/entries`, {method:'POST', body:JSON.stringify({title, category, content, target_id: targetId ? parseInt(targetId) : null})});
+    }
+    bootstrap.Modal.getInstance(document.getElementById('entryModal')).hide();
+    loadGraph();
+}
+
+let isOwner = false;
+let projectMembers = [];
+
+async function loadProjectInfo() {
+    const resp = await apiFetch(`/api/projects/${PROJECT_ID}`);
+    const data = await resp.json();
+    if (data.data) {
+        document.getElementById('project-name').textContent = data.data.name;
+        isOwner = !!data.data.is_owner;
+        projectMembers = data.data.members || [];
+        if (isOwner) document.getElementById('members-btn').style.display = '';
+    }
+}
+
+async function showMembersModal() {
+    await renderMembers();
+    new bootstrap.Modal(document.getElementById('membersModal')).show();
+}
+
+async function renderMembers() {
+    const resp = await apiFetch(`/api/projects/${PROJECT_ID}`);
+    const data = await resp.json();
+    projectMembers = data.data.members || [];
+    const list = document.getElementById('member-list');
+    list.innerHTML = projectMembers.map((m, i) => `<div class="d-flex justify-content-between align-items-center py-1" style="border-bottom:1px solid var(--border);font-size:0.78rem;">
+        <span>${esc(m)}</span>
+        <button class="btn btn-sm btn-outline-danger" onclick="removeMember(${i})" style="font-size:0.6rem;padding:0 6px;">${t('delete')}</button>
+    </div>`).join('') || '<div style="color:var(--text-dim);font-size:0.75rem;">无成员</div>';
+}
+
+async function addMember() {
+    const name = document.getElementById('member-username').value.trim();
+    const msg = document.getElementById('member-msg');
+    if (!name) { msg.textContent = '请输入用户名'; msg.style.color = 'var(--red)'; return; }
+    const resp = await apiFetch(`/api/projects/${PROJECT_ID}/members`, {method:'POST', body:JSON.stringify({username:name})});
+    const d = await resp.json().catch(()=>({}));
+    if (resp.ok) { document.getElementById('member-username').value = ''; msg.textContent = '已添加'; msg.style.color = 'var(--green)'; renderMembers(); }
+    else { msg.textContent = d.detail || '失败'; msg.style.color = 'var(--red)'; }
+}
+
+async function removeMember(idx) {
+    const name = projectMembers[idx];
+    if (name == null) return;
+    if (!confirm(`移除成员 ${name}?`)) return;
+    const resp = await apiFetch(`/api/projects/${PROJECT_ID}/members/${encodeURIComponent(name)}`, {method:'DELETE'});
+    renderMembers();
+}
+
+async function loadTargetList() {
+    if (targetPollBusy) return;
+    targetPollBusy = true;
+    try {
+        const resp = await apiFetch(`/api/projects/${PROJECT_ID}/targets`);
+        const data = await resp.json();
+        const targets = data.data || [];
+        const sig = targets.map(t => `${t.id}:${t.ip}:${t.hostname||''}:${t.os||''}`).join('|');
+        if (sig === lastTargetSig) return;      // 无变化不重绘
+        lastTargetSig = sig;
+        const list = document.getElementById('target-list');
+        document.getElementById('target-count').textContent = targets.length ? `(${targets.length})` : '';
+        if (targets.length === 0) {
+            list.innerHTML = `<div style="color:var(--text-dim); font-size:0.75rem;">无目标</div>`;
+            return;
+        }
+        list.innerHTML = targets.map(target => `
+            <div class="d-flex align-items-center justify-content-between py-1" style="border-bottom:1px solid var(--border); font-size:0.78rem;">
+                <div>
+                    <span style="color:var(--text-primary); font-weight:500;">${esc(target.ip)}</span>
+                    ${target.hostname ? `<span style="color:var(--text-secondary); margin-left:6px;">${esc(target.hostname)}</span>` : ''}
+                    ${target.os ? `<span style="color:var(--text-dim); margin-left:6px; font-size:0.7rem;">${esc(target.os)}</span>` : ''}
+                </div>
+                <div>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteTarget(${target.id})" style="font-size:0.6rem; padding:1px 6px;">${t('delete')}</button>
+                </div>
+            </div>
+        `).join('');
+    } catch(e) { /* 忽略瞬时错误，下次轮询重试 */ }
+    finally { targetPollBusy = false; }
+}
+
+async function deleteTarget(id) {
+    if (!confirm(t('confirm_delete_target'))) return;
+    await apiFetch(`/api/projects/${PROJECT_ID}/targets/${id}`, {method:'DELETE'});
+    loadTargetList();
+    loadGraph();
+}
+
+loadProjectInfo();
+loadGraph();
+loadTargetList();
+</script>
+{% endblock %}

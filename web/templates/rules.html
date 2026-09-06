@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}规则管理{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 style="color:var(--accent); letter-spacing:2px; text-transform:uppercase; font-size:0.9rem;">
+        <span style="color:var(--text-secondary)">&gt;</span> <span data-i18n="rules_engine">规则引擎</span>
+    </h4>
+    <div>
+        <button class="btn btn-danger btn-sm me-1" onclick="showAddRule()">+ <span data-i18n="add">添加</span></button>
+        <button class="btn btn-outline-warning btn-sm" onclick="reloadRules()"><span data-i18n="reload">重载</span></button>
+    </div>
+</div>
+<div id="rule-list"></div>
+
+<div class="modal fade" id="ruleModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title" style="color:var(--accent)">规则编辑器</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3"><label class="form-label" data-i18n="title">名称</label><input type="text" class="form-control" id="rule-name"></div>
+                    <div class="col-md-3 mb-3"><label class="form-label" data-i18n="category">分类</label>
+                        <select class="form-select" id="rule-category"><option>service</option><option>vulnerability</option><option>credential</option><option>lateral</option><option>general</option></select>
+                    </div>
+                    <div class="col-md-3 mb-3"><label class="form-label" data-i18n="priority">优先级</label>
+                        <select class="form-select" id="rule-priority"><option value="high">高</option><option value="medium" selected>中</option><option value="low">低</option></select>
+                    </div>
+                </div>
+                <div class="mb-3"><label class="form-label" data-i18n="trigger_condition">触发条件</label><input type="text" class="form-control font-monospace" id="rule-condition" placeholder="e.g. has_target and service_count == 0" style="color:var(--green)!important;" oninput="debouncedCheckCondition()">
+                    <div id="cond-status" style="font-size:0.7rem;margin-top:4px;"></div>
+                    <div style="margin-top:4px;">
+                        <a href="#" onclick="toggleCondHelp(event)" style="font-size:0.7rem;color:var(--accent);text-decoration:none;">[+] 查看可用变量与运算符</a>
+                        <div id="cond-help" style="display:none;margin-top:6px;border:1px solid var(--border);border-radius:4px;padding:8px;font-size:0.7rem;max-height:180px;overflow:auto;">
+                            <div><b>变量：</b><span id="cond-help-vars"></span></div>
+                            <div style="margin-top:4px;"><b>运算符：</b><span id="cond-help-ops"></span></div>
+                            <div style="margin-top:4px;color:var(--text-secondary);">例：<code>has_vuln_unexploited</code> · <code>vuln_unexploited_count &gt; 0</code> · <code>web_port_count &gt; 0 and vuln_count == 0</code> · <code>not has_task</code></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mb-3"><label class="form-label" data-i18n="suggestion_title">建议标题</label><input type="text" class="form-control" id="rule-title"></div>
+                <div class="mb-3"><label class="form-label" data-i18n="suggestion_reason">建议原因</label><input type="text" class="form-control" id="rule-reason"></div>
+                <div class="mb-3"><label class="form-label" data-i18n="suggested_tool">建议工具</label><input type="text" class="form-control font-monospace" id="rule-tool"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="cancel">取消</button>
+                <button class="btn btn-danger" onclick="saveRule()" data-i18n="save">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+let editingRuleId = null;
+let isAdmin = false;
+
+let condTimer = null;
+function debouncedCheckCondition() {
+    if (condTimer) clearTimeout(condTimer);
+    condTimer = setTimeout(() => checkCondition(), 300);
+}
+
+async function checkCondition() {
+    const cond = document.getElementById('rule-condition').value;
+    const status = document.getElementById('cond-status');
+    if (!cond.trim()) { status.textContent = ''; status.style.color = ''; return true; }
+    const resp = await apiFetch('/api/rules/validate', {method:'POST', body:JSON.stringify({condition: cond})});
+    if (!resp.ok) { status.textContent = '校验失败'; status.style.color = 'var(--red)'; return false; }
+    const data = await resp.json();
+    if (data.ok) { status.textContent = '✓ 语法正确'; status.style.color = 'var(--green)'; }
+    else { status.textContent = '✗ ' + (data.error || '语法错误'); status.style.color = 'var(--red)'; }
+    return !!data.ok;
+}
+
+async function loadRuleMeta() {
+    try {
+        const resp = await apiFetch('/api/rules/meta');
+        const d = await resp.json();
+        document.getElementById('cond-help-vars').innerHTML =
+            (d.variables||[]).map(v => `<code>${v.name}</code><span style="color:var(--text-dim)">(${v.type} ${v.desc})</span> `).join(' ');
+        document.getElementById('cond-help-ops').textContent = (d.operators||[]).join('  ');
+    } catch(e) {}
+}
+
+function toggleCondHelp(e) {
+    e.preventDefault();
+    const box = document.getElementById('cond-help');
+    const on = box.style.display === 'none' || !box.style.display;
+    box.style.display = on ? 'block' : 'none';
+    e.currentTarget.textContent = on ? '[-] 收起' : '[+] 查看可用变量与运算符';
+    if (on) loadRuleMeta();
+}
+
+
+async function initRulesPage() {
+    try {
+        const resp = await apiFetch('/api/me');
+        const data = await resp.json();
+        isAdmin = !!(data.data && data.data.is_admin);
+    } catch(e) { isAdmin = false; }
+    if (!isAdmin) {
+        const head = document.querySelector('.d-flex.justify-content-between.mb-4');
+        if (head) head.innerHTML = '<h4 style="color:var(--accent);letter-spacing:2px;text-transform:uppercase;font-size:0.9rem;"><span style="color:var(--text-secondary)">&gt;</span> 规则引擎</h4><span style="color:var(--text-dim);font-size:0.7rem;">只读（仅管理员可编辑）</span>';
+    }
+    loadRules();
+}
+
+async function loadRules() {
+    const resp = await apiFetch('/api/rules');
+    const data = await resp.json();
+    ruleCache = data.data || [];
+    document.getElementById('rule-list').innerHTML = ruleCache.map((r, i) => `
+        <div class="rule-item">
+            <input type="checkbox" class="form-check-input me-2" ${r.enabled ? 'checked' : ''} ${isAdmin ? '' : 'disabled'} onchange="toggleRuleAt(${i})">
+            <span class="badge me-2" style="background:${r.priority==='high'?'var(--red)':r.priority==='medium'?'var(--yellow)':'var(--border)'}; color:#fff; font-size:0.6rem;">${t(r.priority)}</span>
+            <span style="color:var(--accent); font-size:0.7rem; font-weight:bold; min-width:50px;">${esc(r.id)}</span>
+            <span class="flex-grow-1" style="font-size:0.8rem;">${esc(r.name)}</span>
+            ${isAdmin ? `<button class="btn btn-sm btn-outline-secondary me-1" onclick="editRuleAt(${i})" style="font-size:0.65rem;">${t('edit')}</button>
+            <button class="btn btn-sm btn-outline-danger" onclick="deleteRuleAt(${i})" style="font-size:0.65rem;">${t('delete')}</button>` : ''}
+        </div>
+    `).join('') || `<div style="color:var(--text-secondary); padding:20px; text-align:center;">${t('no_rules')}</div>`;
+}
+
+// 规则缓存 + 索引方式操作（避免把 id 拼进 onclick 属性）
+let ruleCache = [];
+
+function ruleByIdx(i) { return ruleCache[i] || null; }
+function toggleRuleAt(i) { const r = ruleByIdx(i); if (r) toggleRule(r.id); }
+function editRuleAt(i) { const r = ruleByIdx(i); if (r) editRule(r.id); }
+async function deleteRuleAt(i) { const r = ruleByIdx(i); if (r) await deleteRule(r.id); }
+
+function showAddRule() { editingRuleId = null; document.getElementById('rule-name').value=''; document.getElementById('rule-category').value='service'; document.getElementById('rule-condition').value=''; document.getElementById('rule-title').value=''; document.getElementById('rule-reason').value=''; document.getElementById('rule-tool').value=''; document.getElementById('rule-priority').value='medium'; const st=document.getElementById('cond-status'); if(st){st.textContent='';} new bootstrap.Modal(document.getElementById('ruleModal')).show(); }
+
+async function editRule(id) {
+    const resp = await apiFetch('/api/rules');
+    const data = await resp.json();
+    const rule = (data.data||[]).find(r => r.id === id);
+    if (!rule) return;
+    editingRuleId = id;
+    document.getElementById('rule-name').value = rule.name || '';
+    document.getElementById('rule-category').value = rule.category || 'service';
+    document.getElementById('rule-condition').value = rule.trigger?.condition || '';
+    document.getElementById('rule-title').value = rule.suggestion?.title || '';
+    document.getElementById('rule-reason').value = rule.suggestion?.reason || '';
+    document.getElementById('rule-tool').value = rule.suggestion?.suggested_tool || '';
+    document.getElementById('rule-priority').value = rule.priority || 'medium';
+    new bootstrap.Modal(document.getElementById('ruleModal')).show();
+    checkCondition();   // 打开即校验已有条件
+}
+
+async function toggleRule(id) { await apiFetch(`/api/rules/${id}/toggle`, {method:'PATCH'}); loadRules(); }
+async function deleteRule(id) { if(confirm('确认删除?')) { await apiFetch(`/api/rules/${id}`, {method:'DELETE'}); loadRules(); } }
+async function reloadRules() { await apiFetch('/api/rules/reload', {method:'POST'}); alert('规则已重载'); }
+
+async function saveRule() {
+    // 保存前强制校验语法
+    if (!(await checkCondition())) {
+        alert('触发条件语法不正确，请修正后再保存');
+        return;
+    }
+    const body = {
+        name: document.getElementById('rule-name').value,
+        category: document.getElementById('rule-category').value,
+        trigger_condition: document.getElementById('rule-condition').value || 'False',
+        suggestion_title: document.getElementById('rule-title').value,
+        suggestion_reason: document.getElementById('rule-reason').value,
+        suggested_tool: document.getElementById('rule-tool').value,
+        priority: document.getElementById('rule-priority').value,
+    };
+    if (editingRuleId) { await apiFetch(`/api/rules/${editingRuleId}`, {method:'PUT', body:JSON.stringify(body)}); }
+    else { await apiFetch('/api/rules', {method:'POST', body:JSON.stringify(body)}); }
+    bootstrap.Modal.getInstance(document.getElementById('ruleModal')).hide();
+    loadRules();
+}
+
+initRulesPage();
+</script>
+{% endblock %}

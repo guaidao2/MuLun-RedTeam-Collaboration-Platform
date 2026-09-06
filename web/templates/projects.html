@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}项目列表{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 style="color:var(--accent); letter-spacing:2px; text-transform:uppercase; font-size:0.9rem;">
+        <span style="color:var(--text-secondary)">&gt;</span> <span data-i18n="projects">项目</span>
+    </h4>
+    <button class="btn btn-danger btn-sm" onclick="showCreateModal()">+ <span data-i18n="new_project">新建项目</span></button>
+</div>
+
+<div id="project-list" class="row">
+    <div class="col-12 text-center py-5" style="color:var(--text-secondary)"><span data-i18n="loading">加载中...</span></div>
+</div>
+
+<div class="modal fade" id="createModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title" style="color:var(--accent)" data-i18n="new_project">新建项目</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-3"><label class="form-label" data-i18n="project_name">项目名称</label><input type="text" class="form-control" id="new-name"></div>
+                <div class="mb-3"><label class="form-label" data-i18n="description">描述</label><textarea class="form-control" id="new-desc" rows="3"></textarea></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="cancel">取消</button>
+                <button class="btn btn-danger" onclick="createProject()" data-i18n="create">创建</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title" style="color:var(--accent)" data-i18n="edit_project">编辑项目</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <input type="hidden" id="edit-id">
+                <div class="mb-3"><label class="form-label" data-i18n="project_name">项目名称</label><input type="text" class="form-control" id="edit-name"></div>
+                <div class="mb-3"><label class="form-label" data-i18n="description">描述</label><textarea class="form-control" id="edit-desc" rows="3"></textarea></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="cancel">取消</button>
+                <button class="btn btn-danger" onclick="saveEditProject()" data-i18n="save">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+
+// 项目数据缓存（避免将用户输入拼进 onclick 属性造成 XSS）
+let allProjects = [];
+
+async function loadProjects() {
+    const resp = await apiFetch('/api/projects');
+    const data = await resp.json();
+    allProjects = data.data || [];
+    const list = document.getElementById('project-list');
+    if (allProjects.length === 0) {
+        list.innerHTML = `<div class="col-12 text-center py-5" style="color:var(--text-secondary)">${t('no_projects')}</div>`;
+        return;
+    }
+    list.innerHTML = allProjects.map(p => `
+        <div class="col-md-6 col-lg-4 mb-3">
+            <div class="project-card h-100" style="cursor:pointer;" onclick="openProject(${p.id})">
+                <div class="d-flex justify-content-between align-items-start">
+                    <h5 style="flex-grow:1;">${esc(p.name)}</h5>
+                    <div class="ms-2">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="event.stopPropagation();openEditModal(${p.id})" style="font-size:0.65rem;">${t('edit')}</button>
+                        <button class="btn btn-sm btn-outline-danger ms-1" onclick="event.stopPropagation();deleteProject(${p.id})" style="font-size:0.65rem;">${t('delete')}</button>
+                    </div>
+                </div>
+                <p style="color:var(--text-secondary); font-size:0.75rem;">${esc(p.description || 'No description')}</p>
+                <div style="font-size:0.7rem; color:var(--text-secondary); margin-top:12px; border-top:1px solid var(--border); padding-top:10px;">
+                    <span style="color:var(--accent)">${p.stats?.targets || 0}</span> ${t('targets_count')} &nbsp;
+                    <span style="color:var(--purple)">${p.stats?.entries || 0}</span> ${t('entries_count')} &nbsp;
+                    <span style="color:var(--text-secondary)">${esc(p.owner)}</span>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function openProject(id) {
+    location.href = `/project/${id}`;
+}
+
+function openEditModal(id) {
+    const p = allProjects.find(x => x.id === id);
+    if (!p) return;
+    document.getElementById('edit-id').value = p.id;
+    document.getElementById('edit-name').value = p.name;
+    document.getElementById('edit-desc').value = p.description || '';
+    new bootstrap.Modal(document.getElementById('editModal')).show();
+}
+
+function showCreateModal() { new bootstrap.Modal(document.getElementById('createModal')).show(); }
+
+async function createProject() {
+    const name = document.getElementById('new-name').value;
+    const desc = document.getElementById('new-desc').value;
+    if (!name) return;
+    await apiFetch('/api/projects', {method:'POST', body:JSON.stringify({name, description:desc})});
+    bootstrap.Modal.getInstance(document.getElementById('createModal')).hide();
+    loadProjects();
+}
+
+async function deleteProject(id) {
+    if (!confirm(t('confirm_delete_project'))) return;
+    const resp = await apiFetch(`/api/projects/${id}`, {method:'DELETE'});
+    if (!resp.ok) { alert((await resp.json()).detail || '删除失败'); return; }
+    loadProjects();
+}
+
+async function saveEditProject() {
+    const id = document.getElementById('edit-id').value;
+    const name = document.getElementById('edit-name').value;
+    const desc = document.getElementById('edit-desc').value;
+    if (!name) return;
+    await apiFetch(`/api/projects/${id}`, {method:'PUT', body:JSON.stringify({name, description:desc})});
+    bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
+    loadProjects();
+}
+
+loadProjects();
+</script>
+{% endblock %}

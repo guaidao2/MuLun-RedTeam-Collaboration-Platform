@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}设置{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="settings-card">
+            <h4 style="color:var(--accent); letter-spacing:2px; text-transform:uppercase; font-size:0.9rem; margin-bottom:24px;">
+                <span style="color:var(--text-secondary)">&gt;</span> <span data-i18n="settings">设置</span>
+            </h4>
+            <div class="mb-4">
+                <div style="font-size:0.7rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px; margin-bottom:4px;" data-i18n="current_user">当前用户</div>
+                <div id="current-user-display" style="color:var(--accent); font-size:1rem; font-weight:bold;">--</div>
+            </div>
+            <hr class="border-secondary">
+            <div class="mb-3">
+                <div style="font-size:0.7rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px; margin-bottom:12px;" data-i18n="change_password">修改密码</div>
+                <div class="mb-3"><label class="form-label" data-i18n="old_password">当前密码</label><input type="password" class="form-control" id="old-password"></div>
+                <div class="mb-3"><label class="form-label" data-i18n="new_password">新密码</label><input type="password" class="form-control" id="new-password"></div>
+                <div class="mb-3"><label class="form-label" data-i18n="confirm_password">确认密码</label><input type="password" class="form-control" id="confirm-password"></div>
+                <button class="btn btn-danger" onclick="changePassword()" data-i18n="save">保存</button>
+                <div id="pw-msg" class="mt-2" style="display:none; font-size:0.75rem;"></div>
+            </div>
+            <hr class="border-secondary">
+            <!-- 平台 API Token（MCP / 外部接口） -->
+            <div id="token-card" style="display:none;">
+                <div style="font-size:0.7rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px; margin-bottom:4px;" data-i18n="platform_token">平台 API Token</div>
+                <div style="font-size:0.68rem; color:var(--text-dim); margin-bottom:8px;" data-i18n="token_note">用于 MCP/外部接口鉴权。初始随机 Token 永久有效，除非手动刷新（旧 Token 立即失效）。</div>
+                <div class="input-group">
+                    <input type="password" class="form-control font-monospace" id="platform-token" readonly style="font-size:0.72rem;">
+                    <button class="btn btn-outline-secondary" onclick="copyToken()" data-i18n="copy">复制</button>
+                    <button class="btn btn-outline-danger" onclick="refreshToken()" data-i18n="refresh_token">刷新</button>
+                </div>
+                <div id="token-msg" style="font-size:0.72rem;margin-top:6px;"></div>
+                <div style="font-size:0.68rem; color:var(--text-dim); margin-top:6px;" id="token-meta"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+document.getElementById('current-user-display').textContent = localStorage.getItem('username') || '--';
+
+async function changePassword() {
+    const oldPw = document.getElementById('old-password').value;
+    const pw = document.getElementById('new-password').value;
+    const confirmPw = document.getElementById('confirm-password').value;
+    const msg = document.getElementById('pw-msg');
+    if (!oldPw) { msg.textContent = '请输入当前密码'; msg.style.color = 'var(--red)'; msg.style.display = 'block'; return; }
+    if (pw !== confirmPw) { msg.textContent = t('passwords_mismatch'); msg.style.color = 'var(--red)'; msg.style.display = 'block'; return; }
+    if (pw.length < 6) { msg.textContent = t('password_too_short'); msg.style.color = 'var(--red)'; msg.style.display = 'block'; return; }
+    const resp = await apiFetch('/api/me/password', {method:'PUT', body:JSON.stringify({old_password: oldPw, new_password: pw})});
+    const data = await resp.json();
+    if (resp.ok) { msg.textContent = t('password_updated'); msg.style.color = 'var(--green)'; }
+    else { msg.textContent = data.detail || 'Failed'; msg.style.color = 'var(--red)'; }
+    msg.style.display = 'block';
+}
+
+// ===== 平台 API Token（仅管理员可见可刷）=====
+async function initTokenCard() {
+    try {
+        const me = await (await apiFetch('/api/me')).json();
+        if (!me.data || !me.data.is_admin) return;
+        document.getElementById('token-card').style.display = 'block';
+        await loadToken();
+    } catch(e) {}
+}
+
+async function loadToken() {
+    const resp = await apiFetch('/api/platform/token');
+    if (!resp.ok) return;
+    const d = (await resp.json()).data;
+    const el = document.getElementById('platform-token');
+    el.value = d.token || '';
+    const meta = document.getElementById('token-meta');
+    const created = d.created_at ? new Date(d.created_at).toLocaleString() : '';
+    const rotated = d.rotated_at ? new Date(d.rotated_at).toLocaleString() : null;
+    meta.textContent = d.permanent_default
+        ? `初始 Token（永久）· 创建于 ${created}`
+        : `已手动刷新于 ${rotated || created} · 创建于 ${created}`;
+}
+
+async function copyToken() {
+    const val = document.getElementById('platform-token').value;
+    if (!val) return;
+    try { await navigator.clipboard.writeText(val); }
+    catch(e) { document.getElementById('platform-token').type='text'; document.getElementById('platform-token').select(); document.execCommand('copy'); document.getElementById('platform-token').type='password'; }
+    const msg = document.getElementById('token-msg');
+    msg.textContent = '已复制'; msg.style.color = 'var(--green)';
+}
+
+async function refreshToken() {
+    if (!confirm('刷新后旧 Token 将立即失效，确认继续？')) return;
+    const resp = await apiFetch('/api/platform/token/refresh', {method:'POST'});
+    const d = await resp.json().catch(()=>({}));
+    const msg = document.getElementById('token-msg');
+    if (resp.ok) {
+        msg.textContent = 'Token 已刷新'; msg.style.color = 'var(--green)';
+        document.getElementById('platform-token').value = d.data?.token || '';
+        loadToken();
+    } else {
+        msg.textContent = d.detail || '刷新失败'; msg.style.color = 'var(--red)';
+    }
+}
+
+initTokenCard();
+</script>
+{% endblock %}

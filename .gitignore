@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Database
+data/platform.db
+data/*.db
+
+# Uploads / Reports（实际位于 data/ 下）
+uploads/*
+data/uploads/*
+
+# Reports
+reports/*
+data/reports/*
+
+# 整个运行时数据目录不发布（库 / 上传 / 报告 / Token 等）
+data/
+data/*
+
+# Generated
+*.log
+.DS_Store
+Thumbs.db
+
+# 幕论神图 (reference only, not part of this project)
+幕论神图/
+幕论神图.zip
+
+# runtime-generated rules
+rules/custom_rules.yaml
+
+# runtime secrets
+rules/custom_rules.yaml
+data/api_token.json
+
+# reasonix / codegraph 元数据（不发布）
+.reasonix/
+.codegraph/
