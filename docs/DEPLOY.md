@@ -24,12 +24,24 @@
 # 在项目根目录执行
 docker build -t mulun-redteam:latest .
 # 老服务器无 mcp 依赖也没关系——全部在镜像内安装
+# （requirements.txt 已把 mcp 锁在 1.x：mcp 2.x 移除了 FastMCP 会导致启动报错）
 ```
 
 校验：
 
 ```bash
 docker image ls | grep mulun-redteam
+```
+
+### 1.1 国内下载慢 / 换 pip 镜像源
+
+Dockerfile 默认走**清华 PyPI 镜像**（国内快）。仍慢或在内网时，用 `--build-arg PIP_INDEX_URL` 覆盖：
+
+```bash
+# 阿里云
+docker build --build-arg PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple -t mulun-redteam:latest .
+# 官方源（海外服务器）
+docker build --build-arg PIP_INDEX_URL=https://pypi.org/simple -t mulun-redteam:latest .
 ```
 
 ---
@@ -162,7 +174,7 @@ podman cp mulun-redteam:/app/data/platform.db ./backup_$(date +%F).db
 | 现象 | 处理 |
 |------|------|
 | 容器内访问不到、curl 连接被拒 | 未设置 `REDTEAM_JWT_SECRET` → 已在容器内只监听回环；设置后重建 |
-| `mcp` 模块报错 | 用的是**旧镜像**：重新 `docker build`（Dockerfile 会装 mcp） |
+| `mcp` 模块报错 | 用的是**旧镜像**：重新 `docker build`（requirements.txt 已锁 `mcp>=1.9,<2`） |
 | compose 报 `REDTEAM_JWT_SECRET` 为空 | 复制 `.env.example` 为 `.env` 并填写 |
 | 数据不持久 | 确认挂载了 `-v ./data:/app/data` 或命名卷 |
 | rootless podman 写权限 | 见 4.2 用命名卷 |
