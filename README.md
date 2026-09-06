@@ -67,6 +67,36 @@ python app.py
 
 ---
 
+## 容器化部署（Docker / Docker Compose / Podman）
+
+老服务器无需本机安装 Python 与 `mcp` 等依赖 —— **镜像构建时一次装好**：
+
+```bash
+# 构建镜像
+docker build -t mulun-redteam:latest .
+
+# 方式一：docker run
+docker run -d --name mulun-redteam -p 5000:5000 \
+  -e REDTEAM_JWT_SECRET="$(openssl rand -hex 32)" \
+  -v "$(pwd)/data:/app/data" mulun-redteam:latest
+
+# 方式二：docker compose
+cp .env.example .env      # 填 REDTEAM_JWT_SECRET
+docker compose up -d --build
+
+# 方式三：podman（老服务器友好，命令与 docker 一致）
+podman build -t mulun-redteam:latest .
+podman run -d --name mulun-redteam -p 5000:5000 \
+  -e REDTEAM_JWT_SECRET="$(openssl rand -hex 32)" \
+  -v "$(pwd)/data:/app/data:Z" mulun-redteam:latest
+```
+
+📘 构建 / 手工启动 / Compose / Podman / 数据备份 / HTTPS 反代详见 **[docs/DEPLOY.md](docs/DEPLOY.md)**。
+
+---
+
+---
+
 ## 用户与团队协作
 
 - 默认仅一个账户 `admin`（团队通常共享）；在 `config.py` 的 `USERS` 增加即可新增

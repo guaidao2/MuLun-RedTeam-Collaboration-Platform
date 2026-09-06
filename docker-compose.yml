@@ -1,0 +1,23 @@
+services:
+  redteam:
+    build: .
+    image: mulun-redteam:latest
+    container_name: mulun-redteam
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      # 必填：强随机密钥；不设置则容器内只监听 127.0.0.1（外部访问不到）
+      REDTEAM_JWT_SECRET: "${REDTEAM_JWT_SECRET:?请在 .env 中设置 REDTEAM_JWT_SECRET}"
+      # 可选：覆盖默认 admin 口令（仅内存）
+      REDTEAM_ADMIN_PASSWORD: "${REDTEAM_ADMIN_PASSWORD:-}"
+      REDTEAM_DEBUG: "0"
+    volumes:
+      # 持久化：sqlite db / 上传 / 报告 / api_token
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:5000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

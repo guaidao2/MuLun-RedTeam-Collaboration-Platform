@@ -55,3 +55,6 @@ data/api_token.json
 # reasonix / codegraph 元数据（不发布）
 .reasonix/
 .codegraph/
+
+# env secrets
+.env
