@@ -60,10 +60,9 @@ docker run -d --name mulun-redteam \
   mulun-redteam:latest
 ```
 
-访问 `http://<宿主机IP>:5000`，默认账号 **admin / admin123**（来自 `config.py`，无需 `REDTEAM_ADMIN_PASSWORD`）。
+访问 `http://<宿主机IP>:5000`，默认账号 **admin / admin123**（来自 `config.py`）。
 
-> 说明：不传 `REDTEAM_ADMIN_PASSWORD` 时就用 `config.py` 默认口令 `admin123`；
-> 登录后可在「设置」改密码（会写回 `config.py`，裸跑持久；容器重建会丢——见第 5 节）。
+> 默认口令方式即可；`REDTEAM_ADMIN_PASSWORD` 只是**另一种可选方式**（启动时覆盖、仅内存，见第 5 节）。
 
 > 未设 `REDTEAM_JWT_SECRET` 时，镜像内服务只监听 `127.0.0.1`（安全护栏）。
 > 对外/跨主机访问必须设置该变量。
@@ -157,10 +156,8 @@ podman run -d --name mulun-redteam \
 | `REDTEAM_DEBUG` | 否 | `1` 开 reload（调试），生产保持 `0` |
 | `REDTEAM_MCP_ALLOWED_HOSTS` | 否 | MCP DNS-rebinding 白名单，逗号分隔。留空=关闭该层（`/mcp` 已有平台 Token 鉴权；默认关闭可避免「公网 IP Host 被 mcp 返回 421」）|
 
-> ⚠️ **修改登录密码的持久化**：页面「设置 → 修改密码」会把新口令**写入容器内的 `config.py`**（镜像可写层，不在 `data` 卷）。
-> `docker rm` / `docker compose up -d --build` 重建后会丢回镜像里的旧值。要跨重建持久，选一种：
-> 1. **固定 env 流（推荐）**：密码固定在 `.env`/启动命令的 `REDTEAM_ADMIN_PASSWORD`，重启用同一值；
-> 2. **源码流**：改 `config.py` 默认口令后重新 `docker build`（烤进镜像）。
+> 默认 `admin/admin123`（config.py）即可。**可选方式**：页面「设置」改密码写回 `config.py`；
+> 容器内因 config.py 在镜像层，`docker rm`/`--build` 重建会丢 → 想跨重建持久就改 `config.py` 默认值后重新 build，或用固定 `REDTEAM_ADMIN_PASSWORD`。
 
 ---
 
