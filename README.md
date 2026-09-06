@@ -58,7 +58,7 @@ python app.py
 > 生产部署（对外提供服务）请设置：
 > ```bash
 > export REDTEAM_JWT_SECRET="$(openssl rand -hex 32)"   # 强随机密钥
-> export REDTEAM_ADMIN_PASSWORD="$(openssl rand -base64 18)"  # 覆盖默认 admin 口令（仅内存）
+> export REDTEAM_ADMIN_PASSWORD="改成你记得的强密码"      # 覆盖默认 admin 口令（仅内存，勿随机——否则记不住登不进）
 > export REDTEAM_DEBUG=0                                # 关闭 reload/调试
 > python app.py
 > ```

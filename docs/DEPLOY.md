@@ -55,13 +55,18 @@ cp .env.example .env   # 编辑 REDTEAM_JWT_SECRET 为强随机值
 docker run -d --name mulun-redteam \
   -p 5000:5000 \
   -e REDTEAM_JWT_SECRET="$(openssl rand -hex 32)" \
-  -e REDTEAM_ADMIN_PASSWORD="$(openssl rand -base64 18)" \
+  -e REDTEAM_ADMIN_PASSWORD="改成你记得的强密码" \
   -v "$(pwd)/data:/app/data" \
   --restart unless-stopped \
   mulun-redteam:latest
 ```
 
-访问 `http://<宿主机IP>:5000`。
+访问 `http://<宿主机IP>:5000`，用 `REDTEAM_ADMIN_PASSWORD` 的值登录。
+
+> ⚠️ `REDTEAM_ADMIN_PASSWORD` 只在**启动时**覆盖 admin 口令（仅内存）。
+> - 别用随机值——生成后你记不住就登不进去；用**自己记得的固定强密码**。
+> - 每次重启都要带**同一个值**，否则回退默认 `admin123`。
+> - 忘记/丢失：`docker inspect mulun-redteam --format '{{range .Config.Env}}{{println .}}{{end}}' | grep REDTEAM_ADMIN_PASSWORD` 可找回明文。
 
 > 未设 `REDTEAM_JWT_SECRET` 时，镜像内服务只监听 `127.0.0.1`（安全护栏）。
 > 对外/跨主机访问必须设置该变量。
@@ -108,11 +113,13 @@ podman build -t mulun-redteam:latest .
 podman run -d --name mulun-redteam \
   -p 5000:5000 \
   -e REDTEAM_JWT_SECRET="$(openssl rand -hex 32)" \
-  -e REDTEAM_ADMIN_PASSWORD="$(openssl rand -base64 18)" \
+  -e REDTEAM_ADMIN_PASSWORD="改成你记得的强密码" \
   -v "$(pwd)/data:/app/data:Z" \
   --restart unless-stopped \
   mulun-redteam:latest
 ```
+
+> ⚠️ 密码同样**用固定值**（别随机），每次重启保持同一个 `REDTEAM_ADMIN_PASSWORD`（见第 2 节说明）。
 
 > `:Z` 用于开启 SELinux 的容器卷重标（RHEL/CentOS/Fedora 常见）。
 
@@ -153,6 +160,11 @@ podman run -d --name mulun-redteam \
 | `REDTEAM_ADMIN_PASSWORD` | 建议 | 覆盖默认 admin 口令（仅内存，不改源码）|
 | `REDTEAM_DEBUG` | 否 | `1` 开 reload（调试），生产保持 `0` |
 | `REDTEAM_MCP_ALLOWED_HOSTS` | 否 | MCP DNS-rebinding 白名单，逗号分隔。留空=关闭该层（`/mcp` 已有平台 Token 鉴权；默认关闭可避免「公网 IP Host 被 mcp 返回 421」）|
+
+> ⚠️ **修改登录密码的持久化**：页面「设置 → 修改密码」会把新口令**写入容器内的 `config.py`**（镜像可写层，不在 `data` 卷）。
+> `docker rm` / `docker compose up -d --build` 重建后会丢回镜像里的旧值。要跨重建持久，选一种：
+> 1. **固定 env 流（推荐）**：密码固定在 `.env`/启动命令的 `REDTEAM_ADMIN_PASSWORD`，重启用同一值；
+> 2. **源码流**：改 `config.py` 默认口令后重新 `docker build`（烤进镜像）。
 
 ---
 
